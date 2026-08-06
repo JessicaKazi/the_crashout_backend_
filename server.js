@@ -30,9 +30,9 @@ app.post("/signup", async (req, res) => {
     }
 
     const collection = mongoose.connection.collection("users");
-    const userEmail = await collection.findOne({ email: signupEmail })
-    if (userEmail) {
-      return res.status(409).json({ message: "Email is already in use", info: userEmail })
+    const user = await collection.findOne({ email: signupEmail })
+    if (user) {
+      return res.status(409).json({ message: "Email is already in use", info: user })
     }
 
     else {
@@ -57,6 +57,7 @@ app.post("/signup", async (req, res) => {
   }
 })
 
+// userEmail handler was wrong, not the same as the database
 
 // LOGIN ENDPOINT
 app.post("/login", async (req, res) => {
@@ -69,18 +70,18 @@ app.post("/login", async (req, res) => {
 
     const collection = mongoose.connection.collection("users");
 
-    const userEmail = await collection.findOne({ userEmail: loginEmail });
+    const user = await collection.findOne({ email: loginEmail });
 
-    if (!userEmail) {
+    if (!user) {
       return res.status(401).json({ messageType: "errorMessage", message: "Account not found; Signup?" })
     }
 
-    if (userEmail.password !== password) {
+    if (user.password !== password) {
       return res.status(401).json({ messageType: "errorMessage", message: "Password or email is incorrect." })
     }
 
-    if (userEmail.password === password) {
-      return res.status(200).json({ messageType: "loginOkay", message: "Welcome back to ...'Our website name', accessToken", accessToken: { role: userEmail.role, password: userEmail.password, email: userEmail.email } });
+    if (user.password === password) {
+      return res.status(200).json({ messageType: "loginOkay", message: "Welcome back to ...'Our website name', accessToken", accessToken: { role: user.role, password: user.password, email: user.email } });
     }
 
   } catch (error) {
