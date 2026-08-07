@@ -23,26 +23,28 @@ mongoose.connect(process.env.MONGO_URI)
 // SIGNUP ENDPOINT
 app.post("/signup", async (req, res) => {
   try {
-    const { signupName, signupEmail, signupPassword } = req.body;
+    const { userName, email } = req.body;
 
-    if (!signupName || !signupEmail || !signupPassword) {
+    if ( !userName || !email ) {
       return res.status(401).json({ message: "Please fill in all the input fields" });
     }
 
     const collection = mongoose.connection.collection("users");
-    const userEmail = await collection.findOne({ email: signupEmail })
-    if (userEmail) {
+    const user = await collection.findOne({ email })
+    if (user) {
       return res.status(409).json({ message: "Email is already in use", info: userEmail })
     }
 
     else {
 
-      const newSignupName = signupName.replaceAll(" ", "").toLowerCase();
+// Formatting provided username to look like an instagram handle
+     
+const newUserName = userName.replaceAll(" ", "").toLowerCase();
+     
       const result = await collection.insertOne({
-        email: signupEmail,
+        email: email,
         role: "customer",
-        password: signupPassword,
-        userName: "@" + newSignupName,
+        userName: "@" + newUserName,
         createrAt: new Date()
       })
 
@@ -58,32 +60,24 @@ app.post("/signup", async (req, res) => {
 })
 
 
-// LOGIN ENDPOINT
-app.post("/login", async (req, res) => {
+// ENDPOINT USED FOR CHECKING USER ROLES WITH RESTRICTED ACCESS PAGES 
+app.post("/isAuthorised/:email", async (req, res) => {
   try {
-    const { loginEmail, loginPassword } = req.body;
-
-    if (!loginEmail || !loginPassword) {
-      return res.status(401).json({ messageType: "errorDisplay", message: "Please fill in all the form inputs to log in." });
-    }
+    const { email } = req.body;
 
     const collection = mongoose.connection.collection("users");
 
-    const userEmail = await collection.findOne({ userEmail: loginEmail });
+    const user = await collection.findOne({ email });
 
-    if (!userEmail) {
-      return res.status(401).json({ messageType: "errorMessage", message: "Account not found; Signup?" })
+    if (!user) {
+      return res.status(401).json({ message: "User is not signed in" })
+    }
+     else{
+      return res.status(200).json({role:user.role})
     }
 
-    if (userEmail.password !== password) {
-      return res.status(401).json({ messageType: "errorMessage", message: "Password or email is incorrect." })
-    }
-
-    if (userEmail.password === password) {
-      return res.status(200).json({ messageType: "loginOkay", message: "Welcome back to ...'Our website name', accessToken", accessToken: { role: userEmail.role, password: userEmail.password, email: userEmail.email } });
-    }
-
-  } catch (error) {
+  }
+   catch (error) {
     console.error("Error logging in: ", error);
     return res.status(500).json({ message: "Internal server error" });
   }
@@ -95,7 +89,7 @@ app.post("/login", async (req, res) => {
 app.put("/resetPassword", async (req, res) => {
   try {
 
-    const { userId, email, password, resetPassword, confirmPassword, userName } = req.body;
+    const { email, password, resetPassword, confirmPassword, userName } = req.body;
 
     const collection = mongoose.connection.collection("users");
 
