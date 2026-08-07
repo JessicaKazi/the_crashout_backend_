@@ -59,6 +59,7 @@ const newUserName = userName.replaceAll(" ", "").toLowerCase();
   }
 })
 
+// userEmail handler was wrong, not the same as the database
 
 // ENDPOINT USED FOR CHECKING USER ROLES WITH RESTRICTED ACCESS PAGES 
 app.post("/isAuthorised/:email", async (req, res) => {
