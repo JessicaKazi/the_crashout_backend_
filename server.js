@@ -1,9 +1,13 @@
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import { auth } from "./firebase.js";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 dotenv.config();
 
+// const auth = getAuth();
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
@@ -23,48 +27,77 @@ mongoose.connect(process.env.MONGO_URI)
 // SIGNUP ENDPOINT
 app.post("/signup", async (req, res) => {
   try {
-    const { userName, email } = req.body;
 
-    if ( !userName || !email ) {
-      return res.status(401).json({ message: "Please fill in all the input fields" });
-    }
-
+    // Collecting all of the information sent from the frontend
+    const { email, password, userName } = req.body;
     const collection = mongoose.connection.collection("users");
-    const user = await collection.findOne({ email })
-    if (user) {
-      return res.status(409).json({ message: "Email is already in use", info: userEmail })
+
+
+    // Insuring that all of the input fields were filled in by the user
+    if (!userName || !email || !password) {
+      return res.status(401).json({ message: "Please fill in all of the input fields" });
     }
 
+    // Checking to see if there is already someone using that email 
+    const user = await collection.findOne({ email })
+    console.log("Database user search: ", user)
+    if (user) {
+      return res.status(409).json({ message: "Email is already in use" })
+    }
+
+    // VERIFYING THE PASSWORD FORMAT
+    if (password.length < 6) {
+
+      console.log("Your password needs to be longer than 6 characters ")
+      return res.status(400).json({ message: "Your password needs to be longer than 6 characters " });
+    }
+
+    // Creating the users account when all of the requirements are met.
     else {
 
-// Formatting provided username to look like an instagram handle
-     
-const newUserName = userName.replaceAll(" ", "").toLowerCase();
-     
+      // Signing up a user to firebase first before savingtheir email in mongo DB
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const accessToken = userCredential.user.accessToken;
+console.log(accessToken);
+ 
+      // Formatting provided for the username so that the users username will look like an instagram handle
+      const newUserName = userName.replaceAll(" ", "").toLowerCase();
+
+      // Saving a user in mongoDB once they have been successfully signed up with fire base
       const result = await collection.insertOne({
         email: email,
-        role: "customer",
+        role: "customer", //EVERY NEW USER MUST BE GIVEN THE DEFAULT ROLE OF CUSTOMER ON THEIR INITIAL SIGNUP
         userName: "@" + newUserName,
-        createrAt: new Date()
+        createdAt: new Date()
       })
 
-      return res.status(200).json({ message: "User successfully signed up.", info: result })
+      return res.status(200).json({ message: "Successfully signed in.", accessToken: accessToken })
     }
-
   }
 
   catch (error) {
+
+    if (error.code.includes("auth/email-already-in-use")) {
+      console.log("The error message is meant for the frontend and is coming from firebase around line 59");
+      return res.status(400).json({ message: "Email is already being used" });
+    }
+
+    if (error.code.includes("invalid-email")) {
+      console.log("The error message is meant for the frontend and is coming from firebase around line 59");
+      return res.status(400).json({ message: "Invalid email format is being used" });
+    }
+
     console.error("Error signing up: ", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 })
 
-// userEmail handler was wrong, not the same as the database
 
-// ENDPOINT USED FOR CHECKING USER ROLES WITH RESTRICTED ACCESS PAGES 
+
+// ENDPOINT USED FOR CHECKING USER ROLES WHEN THEY WANT TO ACCESS PAGES WITH RESTRICTED ACCESS
 app.post("/isAuthorised/:email", async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email } = req.params;
 
     const collection = mongoose.connection.collection("users");
 
@@ -73,13 +106,14 @@ app.post("/isAuthorised/:email", async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: "User is not signed in" })
     }
-     else{
-      return res.status(200).json({role:user.role})
+
+    else {
+      return res.status(200).json({ role: user.role })
     }
 
   }
-   catch (error) {
-    console.error("Error logging in: ", error);
+  catch (error) {
+    console.error("Error authorising access: ", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -114,13 +148,13 @@ app.put("/resetPassword", async (req, res) => {
 
 
 // Endpoint to get your user profile
-app.get("/myProfile/:userId", async (req, res) => {
+app.get("/myProfile/:email", async (req, res) => {
   try {
 
     const collection = await mongoose.connection.collection("users");
-    const { userId } = req.params;
+    const { email } = req.params;
 
-    const user = await collection.findOne({ userId })
+    const user = await collection.findOne({ email })
 
     return res.status(200).json({ message: "Data successfully collected", userProfileInfo: user })
 
@@ -132,14 +166,15 @@ app.get("/myProfile/:userId", async (req, res) => {
 
 
 
-// Endpoint to get a record of all of the seats you have ever paid for ; we get it using ur unique user id
-app.get("/seatPaymentsHistory/:userId", async (req, res) => {
+// Endpoint to get a record of all of the seats a user has ever booked using their email
+app.get("/seatPaymentsHistory/:email", async (req, res) => {
   try {
 
     const collection = await mongoose.connection.collection("payments");
-    const { userId } = req.params
+    const { email } = req.params
 
-    const user = await collection.findMany({ userId }).toArray();
+    // To make sure that the latest booking shows up first you need to use the .reverse() method in the CRUD function in the frontend
+    const user = (await collection.find({ email }).toArray());
 
     if (!user) {
       return res.status(404).json({ message: "No booking history available" })
@@ -154,31 +189,86 @@ app.get("/seatPaymentsHistory/:userId", async (req, res) => {
 
 
 
-// End used by an admin to make a user a venue manager
-app.post("/changeUserRoles", async (req, res) => {
+// Endpoint used to get the user whose role we want to change 
+app.get("/userByUserName/:email", async (req, res) => {
   try {
+
+    const collection = mongoose.connection.collection("users");
+
+
+    // We must first verify that the person who wants to access this information is an admin
+    const { email } = req.params;
+
+    const admin = await collection.findOne({ email })
+
+    // Checking to make sure that the person who is trying to change a user's role is an admin
+    if (!admin || admin.role !== "admin") {
+      return res.status(401).json({ message: "You do not have authorised access to perform this task" });
+    }
+
+    const { userName } = req.body;
+
+    const user = await collection.findOne({ userName });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    else {
+      return res.status(200).json({ message: "User found.", userName: user.userName, role: user.role })
+    }
+  }
+  catch (error) {
+    console.error("Error finding user: ", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+})
+
+
+
+// End used by an admin to make a user a venue manager
+app.post("/changeUserRoles/:email", async (req, res) => {
+  try {
+
+    const { email } = req.params;
 
     const { userName, role } = req.body;
 
     const collection = await mongoose.connection.collection("users");
-  
-     const user = await collection.findOne({ userName });
-    if(!user){
-      return res.status(409).json({message: "Unable to find user"});
+
+    const admin = await collection.findOne({ email });
+
+    // Checking to make sure that the person who is trying to change a user's role is an admin
+
+    if (!admin) {
+      return res.status(401).json({ message: "You do not have authorised access to perform this task" });
     }
 
-    if (role == "manager") {
+    else if (admin.role !== "admin") {
+      return res.status(401).json({ message: "You do not have authorised access to perform this task" });
+    }
+
+    // Once it is confirmed that the person who is trying to change a users role is an admin, 
+    // you can apply the new userRole to the required account 
+    const user = await collection.findOne({ userName });
+
+    if (!user) {
+      return res.status(409).json({ message: "Unable to find user" });
+    }
+
+    else if (role == "manager") {
       const user = await collection.updateOne({ userName }, { $set: { role } });
       const change = await collection.findOne({ userName })
       return res.status(200).json({
-        message: "User role has been successfully changed to manager", changedRole: change
+        message: "User role has been successfully updated to manager", changedRole: change
       })
     }
+
     else if (role == "customer") {
-      const user = await collection.updateOne({ userName }, { $set: { role } });
+      const user = await collection.updateOne({ userNarme }, { $set: { role } });
       const change = await collection.findOne({ userName })
       return res.status(200).json({
-        message: "User role has been successfully changed to customer", changedRole: change
+        message: "User role has been successfully updated to customer", changedRole: change
       })
     }
 
@@ -188,29 +278,6 @@ app.post("/changeUserRoles", async (req, res) => {
   }
 });
 
-// Endpoint used to get the user whose role we want to change 
-app.get("/getUserByUserName/:userName", async (req, res) => {
-  try{
-    
-    const collection = mongoose.connection.collection("users");
-
-    const { userName } = req.params; 
-
-    const user = await collection.findOne({ userName });
-
-    if(!user){
-      return res.status(404).json({message: "User not found."});
-    }
-
-    else{
-      return res.status(200).json({message:"User found.", userName: user.userName, userRole: user.role })
-    }
-  }
-  catch (error){
-   console.error("Error finding user: ",error);
-   return res.status(500).json({message:"Internal Server Error"});
-  }
-})
 
 
 // End used by a user to book a seat at the cinema
@@ -219,24 +286,25 @@ app.post("/bookingSeat", async (req, res) => {
 
     const collection = await mongoose.connection.collection("payments");
 
-const { userId, bookingPrice, eventDate, bookedBy, numberOfSeats, venueName, address } = req.body;
-// Do not need to have the userid validted but need the booking id counter to create the booking id for the event
+    const { email, bookingPrice, eventDate, bookedBy, numberOfSeats, seatNumber, venueName, address } = req.body;
+    // Do not need to have the userid validted but need the booking id counter to create the booking id for the event
 
-if( !bookingPrice || !eventDate || !bookedBy || !venueName || !address ){
-  return res.status(409).json({ message:"Please fill in all the required fields before booking the venue." });
-}
+    if (!bookingPrice || !eventDate || !bookedBy || !venueName || !address || !numberOfSeats || seatNumber) {
+      return res.status(409).json({ message: "Please fill in all the required fields to finish booking your seat." });
+    }
 
-else {
+    else {
 
-  const user = await collection.insertOne({
-    ...req.body, createdAt: new Date()
-  });
+      const user = await collection.insertOne({
+        ...req.body, createdAt: new Date()
+      });
 
-  res.status(200).json({message:"User created successfully"})
-}
-  } catch (error){
+      return res.status(200).json({ message: "Seat has been successfully booked." })
+    }
+
+  } catch (error) {
     console.error("booking a seat endpoint: ", error);
-    return res.status(500).json({ message:"Internal Server Error" });
+    return res.status(500).json({ message: "Internal Server Error" });
 
   }
 });
@@ -244,13 +312,51 @@ else {
 
 
 // End used by a manager to create a new venue that they own
-app.post("/newVenue", async (req, res) => {
+app.post("/newVenue/:email", async (req, res) => {
   try {
 
-  } catch {
+    // Making sure that the user is a manager in order for tem to create and upload a new venue
+    const usersCollection = await mongoose.connection.collection("users");
 
+    const { email } = req.params;
+
+    const admin = usersCollection.findOne({ email });
+
+    if (!admin) {
+      return res.status(401).json({ message: "You are not authorised to perform this action" });
+    }
+    else if (admin.role == "customer") {
+      return res.status(401).json({ message: "You are not authorised to perform this action" });
+    }
+    const { venueName,
+      numberOfSeats,
+      address,
+      ownerInformation,
+      pricePerSeat,
+      seatArrangement
+    } = req.body
+
+    if (!venueName || !numberOfSeats || !address || !ownerInformation || !pricePerSeat || !seatArrangement) {
+      return res.status(400).json({ message: "Please fill in the necessary information to create and event." });
+    }
+    else {
+
+      const venueCollection = mongoose.connection.collection("venues");
+      await venueCollection.insertOne({ ...req.body, createdAt: new Date() })
+      return res.status(200).json({ message: "Vanue has been successfully created." });
+    }
+  } catch (error) {
+    console.error("There was an error trying to upload a new user: ", error);
+    return res.status(500).json({ message: "Internal Server Error" })
   }
 });
+
+
+
+
+// 6 endpoints left
+
+
 
 
 
@@ -258,17 +364,17 @@ app.post("/newVenue", async (req, res) => {
 app.delete("/removeMyVenue/venueName", async (req, res) => {
   try {
     const { venueName } = req.params
-  const collection = mongoose.connection.collection("venues");
-  const venue = await collection.findOne({ venueName })
+    const collection = mongoose.connection.collection("venues");
+    const venue = await collection.findOne({ venueName })
 
-  if( !venue ){
-    return res.status(404).json({ message: "Venue does not exist." });
-  } else{
-    await collection.deleteOne({ venueName })
-  }
+    if (!venue) {
+      return res.status(404).json({ message: "Venue does not exist." });
+    } else {
+      await collection.deleteOne({ venueName })
+    }
   } catch (error) {
-console.error("Error deleting a venue: ",error);
-return res.status(500).json({message: "Internal Server Error"});
+    console.error("Error deleting a venue: ", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
@@ -335,7 +441,7 @@ app.post("/postForms", async (req, res) => {
 
   try {
     const { email, subject } = req.body;
-    const collection = mongoose.connection.collection("Contact");
+    const collection = mongoose.connection.collection("forms");
 
     if (!email || !subject) {
       return res.status(404).json({ message: "Email and subject are required" });
@@ -343,10 +449,10 @@ app.post("/postForms", async (req, res) => {
 
     const result = await collection.insertOne({ ...req.body, createdAt: new Date() });
 
-    res.status(201).json({ message: "Your form has been sent and recieved by admin", formId: result.insertedId });
+    return res.status(201).json({ message: "Your form has been sent and received by administration" });
   } catch (error) {
     console.error("Unable to send and store the request", error);
-    res.status(500).json({ message: "Intenral server error" });
+    return res.status(500).json({ message: "Intenral server error" });
   }
 });
 
