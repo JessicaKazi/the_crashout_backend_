@@ -56,10 +56,14 @@ app.post("/signup", async (req, res) => {
     else {
 
       // Signing up a user to firebase first before savingtheir email in mongo DB
+      // If theres ever an error while signing up in firebase ;
+      //  firebase responds by sending the error to the actual error block
+      //  so the error handling for firebase occursin the error block;
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const accessToken = userCredential.user.accessToken;
-console.log(accessToken);
- 
+      console.log(accessToken);
+
       // Formatting provided for the username so that the users username will look like an instagram handle
       const newUserName = userName.replaceAll(" ", "").toLowerCase();
 
@@ -92,6 +96,48 @@ console.log(accessToken);
   }
 })
 
+
+
+// ENDPOINT USED TO MAKE A USER LOG INTO THE WEBSITE USING FIREBASE
+app.post("/login", async (req, res) => {
+
+  try {
+    const { email, password } = req.body;
+
+    if ( !email || !password ) {
+      return res.status(400).json({ message: "Please fill in all of the required fields" });
+    }
+
+    const collection = mongoose.connection.collection("users");
+    const user = await collection.findOne({ email });
+
+    if (!user){
+  return res.status(400).json({ message: "You do not have an account; signup?" });
+    }
+
+    else {
+      const userCredentials = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseAccessToken = await userCredentials.user.accessToken;
+      // console.log(userCredentials.user.accessToken)
+      return res.status(200).json({ message: "You have been successfully logged into your account", accessToken: firebaseAccessToken })
+    }
+
+  }
+  catch (error) {
+
+const errorCode = error.code;
+const errorMessage = error.message;
+
+// If the error code is not null that eans that firebase has generated an error message when the user tried to log in 
+if( errorCode !== null ){
+  console.error(errorMessage);
+ return res.status(400).json({ message: "Incorrect email or password" });
+}
+
+    console.error("Error occured while trying to login: ", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+})
 
 
 // ENDPOINT USED FOR CHECKING USER ROLES WHEN THEY WANT TO ACCESS PAGES WITH RESTRICTED ACCESS
