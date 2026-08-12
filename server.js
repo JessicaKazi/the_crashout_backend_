@@ -431,7 +431,8 @@ app.put("/venueUpdate", async (req, res) => {
   try {
 
 
-  } catch (error) {
+  } 
+  catch (error) {
   }
 });
 
