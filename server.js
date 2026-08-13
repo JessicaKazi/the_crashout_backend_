@@ -1,17 +1,22 @@
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import multer from "multer";
+import cors from 'cors';
 import { auth } from "./firebase.js";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 dotenv.config();
 
+// Multer set up
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
 // const auth = getAuth();
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
-import cors from 'cors';
 // Allow requests specifically from your frontend port
 app.use(cors({ origin: 'http://localhost:5173' }));
 
@@ -61,7 +66,7 @@ app.post("/signup", async (req, res) => {
       //  so the error handling for firebase occursin the error block;
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const accessToken = userCredential.user.accessToken;
+      const accessToken = userCredential.user;
       console.log(accessToken);
 
       // Formatting provided for the username so that the users username will look like an instagram handle
@@ -104,35 +109,36 @@ app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if ( !email || !password ) {
+    if (!email || !password) {
       return res.status(400).json({ message: "Please fill in all of the required fields" });
     }
 
     const collection = mongoose.connection.collection("users");
     const user = await collection.findOne({ email });
 
-    if (!user){
-  return res.status(400).json({ message: "You do not have an account; signup?" });
+    if (!user) {
+      return res.status(400).json({ message: "You do not have an account; signup?" });
     }
 
     else {
       const userCredentials = await signInWithEmailAndPassword(auth, email, password);
-      const firebaseAccessToken = await userCredentials.user.accessToken;
+      const firebaseAccessToken = await userCredentials.user.email;
       // console.log(userCredentials.user.accessToken)
+      console.log(firebaseAccessToken)
       return res.status(200).json({ message: "You have been successfully logged into your account", accessToken: firebaseAccessToken })
     }
 
   }
   catch (error) {
 
-const errorCode = error.code;
-const errorMessage = error.message;
+    const errorCode = error.code;
+    const errorMessage = error.message;
 
-// If the error code is not null that eans that firebase has generated an error message when the user tried to log in 
-if( errorCode !== null ){
-  console.error(errorMessage);
- return res.status(400).json({ message: "Incorrect email or password" });
-}
+    // If the error code is not null that eans that firebase has generated an error message when the user tried to log in 
+    if (errorCode !== null) {
+      console.error(errorMessage);
+      return res.status(400).json({ message: "Incorrect email or password" });
+    }
 
     console.error("Error occured while trying to login: ", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -358,44 +364,80 @@ app.post("/bookingSeat", async (req, res) => {
 
 
 // End used by a manager to create a new venue that they own
-app.post("/newVenue/:email", async (req, res) => {
-  try {
+app.post("/newVenue/:email",
+  upload.fields([
+    { name: "images", maxCount: 10 },
+    { name: "documents", maxCount: 10 }
+  ]),
+  async (req, res) => {
+    try {
 
-    // Making sure that the user is a manager in order for tem to create and upload a new venue
-    const usersCollection = await mongoose.connection.collection("users");
+      // Making sure that the user is a manager in order for tem to create and upload a new venue
+      const usersCollection = await mongoose.connection.collection("users");
 
-    const { email } = req.params;
+      const { email } = req.params;
 
-    const admin = usersCollection.findOne({ email });
+      const admin = usersCollection.findOne({ email });
 
-    if (!admin) {
-      return res.status(401).json({ message: "You are not authorised to perform this action" });
+      if (!admin) {
+        return res.status(401).json({ message: "You are not authorised to perform this action" });
+      }
+
+      else if (admin.role == "customer") {
+        return res.status(401).json({ message: "You are not authorised to perform this action" });
+      }
+
+      const { venueName,
+        registrationNo,
+        address,
+        documents,
+        facilities,
+        numberOfSeats,
+        seatRows,
+        seatColumns,
+        // ownerInformation,
+        // pricePerSeat,
+      } = req.body
+
+      const images = req.files.images.map((imageObj) => {
+        return {
+          buffer: imageObj.buffer,
+          size: imageObj.size
+        }
+      })
+
+      const seatArrangement = [];
+      let seatNames = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
+
+      for (let i = 0; i < seatRows; i++) {
+        let arr = []
+        let rowNumber = seatNames[i];
+        for (let j = 0; j < seatColumns; j++) {
+          let seat = {
+            seat: `${rowNumber}${j}`,
+            isBooked: false
+          };
+          arr.push(seat);
+        }
+        seatArrangement.push(arr);
+      }
+
+      console.log("Stored images: ", images)
+
+      if (!venueName || !numberOfSeats || !address /*|| !ownerInformation || !pricePerSeat || !seatArrangement*/) {
+        return res.status(400).json({ message: "Please fill in the necessary information to create and event." });
+      }
+      else {
+
+        const venueCollection = mongoose.connection.collection("venues");
+        await venueCollection.insertOne({ ...req.body, seatArrangement:seatArrangement, email:email, images:images, createdAt: new Date() })
+        return res.status(200).json({ message: "Vanue has been successfully created." });
+      }
+    } catch (error) {
+      console.error("There was an error trying to upload a new user: ", error);
+      return res.status(500).json({ message: "Internal Server Error" })
     }
-    else if (admin.role == "customer") {
-      return res.status(401).json({ message: "You are not authorised to perform this action" });
-    }
-    const { venueName,
-      numberOfSeats,
-      address,
-      ownerInformation,
-      pricePerSeat,
-      seatArrangement
-    } = req.body
-
-    if (!venueName || !numberOfSeats || !address || !ownerInformation || !pricePerSeat || !seatArrangement) {
-      return res.status(400).json({ message: "Please fill in the necessary information to create and event." });
-    }
-    else {
-
-      const venueCollection = mongoose.connection.collection("venues");
-      await venueCollection.insertOne({ ...req.body, createdAt: new Date() })
-      return res.status(200).json({ message: "Vanue has been successfully created." });
-    }
-  } catch (error) {
-    console.error("There was an error trying to upload a new user: ", error);
-    return res.status(500).json({ message: "Internal Server Error" })
-  }
-});
+  });
 
 
 
@@ -416,7 +458,8 @@ app.delete("/removeMyVenue/venueName", async (req, res) => {
     if (!venue) {
       return res.status(404).json({ message: "Venue does not exist." });
     } else {
-      await collection.deleteOne({ venueName })
+      await collection.deleteOne({ venueName });
+      return res.status(200).json({ message: "Venue successfully deleted." });
     }
   } catch (error) {
     console.error("Error deleting a venue: ", error);
@@ -431,7 +474,7 @@ app.put("/venueUpdate", async (req, res) => {
   try {
 
 
-  } 
+  }
   catch (error) {
   }
 });
