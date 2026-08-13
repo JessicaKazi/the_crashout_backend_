@@ -72,9 +72,15 @@ app.post("/signup", async (req, res) => {
       // Formatting provided for the username so that the users username will look like an instagram handle
       const newUserName = userName.replaceAll(" ", "").toLowerCase();
 
+
+      // Changing all of the email characters to lowercase
+      // because firebase always returns an email in lowercase when a user signs in.
+      const lowerCase = email.toLowerCase();
+      
       // Saving a user in mongoDB once they have been successfully signed up with fire base
       const result = await collection.insertOne({
         email: email,
+        lowerCase: lowerCase,
         role: "customer", //EVERY NEW USER MUST BE GIVEN THE DEFAULT ROLE OF CUSTOMER ON THEIR INITIAL SIGNUP
         userName: "@" + newUserName,
         createdAt: new Date()
@@ -125,6 +131,7 @@ app.post("/login", async (req, res) => {
       const firebaseAccessToken = await userCredentials.user.email;
       // console.log(userCredentials.user.accessToken)
       console.log(firebaseAccessToken)
+      console.log( email )
       return res.status(200).json({ message: "You have been successfully logged into your account", accessToken: firebaseAccessToken })
     }
 
@@ -147,13 +154,16 @@ app.post("/login", async (req, res) => {
 
 
 // ENDPOINT USED FOR CHECKING USER ROLES WHEN THEY WANT TO ACCESS PAGES WITH RESTRICTED ACCESS
-app.post("/isAuthorised/:email", async (req, res) => {
+app.get("/isAuthorised/:email", async (req, res) => {
   try {
     const { email } = req.params;
 
     const collection = mongoose.connection.collection("users");
+    console.log("Email destructured from isAuthorised endpoint: ",email)
 
-    const user = await collection.findOne({ email });
+    const user = await collection.findOne({ lowerCase: email });
+
+    console.log("The authorised endpoint: ",user)
 
     if (!user) {
       return res.status(401).json({ message: "User is not signed in" })
@@ -399,6 +409,8 @@ app.post("/newVenue/:email",
         // pricePerSeat,
       } = req.body
 
+      
+
       const images = req.files.images.map((imageObj) => {
         return {
           buffer: imageObj.buffer,
@@ -409,20 +421,21 @@ app.post("/newVenue/:email",
       const seatArrangement = [];
       let seatNames = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
 
-      for (let i = 0; i < seatRows; i++) {
+      for (let i = 0; i < parseInt(seatRows); i++) {
         let arr = []
         let rowNumber = seatNames[i];
-        for (let j = 0; j < seatColumns; j++) {
+        for (let j = 0; j < parseInt(seatColumns); j++) {
           let seat = {
-            seat: `${rowNumber}${j}`,
+            seat: `${rowNumber}${j+1}`,
             isBooked: false
           };
           arr.push(seat);
         }
         seatArrangement.push(arr);
+
       }
 
-      console.log("Stored images: ", images)
+
 
       if (!venueName || !numberOfSeats || !address /*|| !ownerInformation || !pricePerSeat || !seatArrangement*/) {
         return res.status(400).json({ message: "Please fill in the necessary information to create and event." });
