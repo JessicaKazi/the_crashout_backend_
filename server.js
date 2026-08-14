@@ -484,8 +484,6 @@ app.delete("/removeMyVenue/venueName", async (req, res) => {
 // Endpoint used to update the information of an existing venue
 app.put("/venueUpdate", async (req, res) => {
   try {
-
-
   }
   catch (error) {
   }
@@ -508,7 +506,7 @@ app.get("/venueBookingHistory", async (req, res) => {
 // Endpoint used to book a venue
 app.post("/bookingVenue", async (req, res) => {
   try {
-    5
+    
   } catch (error) {
 
   }
