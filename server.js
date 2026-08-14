@@ -398,6 +398,7 @@ app.post("/newVenue/:email",
       }
 
       const { venueName,
+        number,
         registrationNo,
         address,
         documents,
@@ -405,8 +406,6 @@ app.post("/newVenue/:email",
         numberOfSeats,
         seatRows,
         seatColumns,
-        // ownerInformation,
-        // pricePerSeat,
       } = req.body
 
       
@@ -531,9 +530,19 @@ app.put("/editUpcomingEvent", async (req, res) => {
 // Endpoint used to get all the events that are coming to display it
 app.get("/upcomingEvent", async (req, res) => {
   try {
-    f
-  } catch (error) {
+    const collection = mongoose.connection.collection("events");
+    const events = await collection.find({}).toArray();
 
+    if(events.length === 0){
+      return res.status(404).json({ message: [{venue:"There are no upcoming events"}]});
+    }
+
+    else {
+      return res.status(200).json({message: events });
+    }
+  } catch (error) {
+console.error("There was an error trying to fetch all ofthe upcoming events: ",error);
+return res.status(500).json({message:"Internal Server Error"})
   }
 });
 
