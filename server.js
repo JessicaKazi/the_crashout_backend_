@@ -114,7 +114,7 @@ app.post("/login", async (req, res) => {
 
   try {
     const { email, password } = req.body;
-
+console.log("The email from thefrontend: ", email )
     if (!email || !password) {
       return res.status(400).json({ message: "Please fill in all of the required fields" });
     }
@@ -129,9 +129,9 @@ app.post("/login", async (req, res) => {
     else {
       const userCredentials = await signInWithEmailAndPassword(auth, email, password);
       const firebaseAccessToken = await userCredentials.user.email;
-      // console.log(userCredentials.user.accessToken)
-      console.log(firebaseAccessToken)
-      console.log( email )
+      console.log(userCredentials.user.accessToken)
+      // console.log(firebaseAccessToken)
+      // console.log( email )
       return res.status(200).json({ message: "You have been successfully logged into your account", accessToken: firebaseAccessToken })
     }
 
@@ -170,7 +170,7 @@ app.get("/isAuthorised/:email", async (req, res) => {
     }
 
     else {
-      return res.status(200).json({ role: user.role })
+      return res.status(200).json({ role: user.role, userName: user.userName })
     }
 
   }
@@ -236,10 +236,12 @@ app.get("/seatPaymentsHistory/:email", async (req, res) => {
     const { email } = req.params
 
     // To make sure that the latest booking shows up first you need to use the .reverse() method in the CRUD function in the frontend
-    const user = (await collection.find({ email }).toArray());
+    const user = await collection.find({ bookedBy:email }).toArray();
 
-    if (!user) {
-      return res.status(404).json({ message: "No booking history available" })
+    if ( user.length === 0 ) {
+      return res.status(404).json({ message: "No booking history available", seatHistory: [{ venueName:"You do not have any booking history available",
+        _id:"err"
+      }] })
     }
     return res.status(200).json({ message: "Seat history successfully found", seatHistory: user })
 
