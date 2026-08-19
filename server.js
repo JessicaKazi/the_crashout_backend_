@@ -413,8 +413,6 @@ app.post("/newVenue/:email",
         seatColumns,
       } = req.body
 
-      // const imagesArr = [];
-
       const images = await Promise.all(req.files.images.map(async (imageObj) => {
 
         const oneImageObj = {
