@@ -60,7 +60,7 @@ app.post("/signup", async (req, res) => {
     // Creating the users account when all of the requirements are met.
     else {
 
-      // Signing up a user to firebase first before savingtheir email in mongo DB
+      // Signing up a user to firebase first before saving their email in mongo DB
       // If theres ever an error while signing up in firebase ;
       //  firebase responds by sending the error to the actual error block
       //  so the error handling for firebase occursin the error block;
