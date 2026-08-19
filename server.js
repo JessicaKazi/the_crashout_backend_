@@ -6,6 +6,7 @@ import cors from 'cors';
 import { auth } from "./firebase.js";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { uploadImages, uploadDocuments } from "./supabase.js";
 
 dotenv.config();
 
@@ -76,7 +77,7 @@ app.post("/signup", async (req, res) => {
       // Changing all of the email characters to lowercase
       // because firebase always returns an email in lowercase when a user signs in.
       const lowerCase = email.toLowerCase();
-      
+
       // Saving a user in mongoDB once they have been successfully signed up with fire base
       const result = await collection.insertOne({
         email: email,
@@ -114,7 +115,7 @@ app.post("/login", async (req, res) => {
 
   try {
     const { email, password } = req.body;
-console.log("The email from thefrontend: ", email )
+    console.log("The email from thefrontend: ", email)
     if (!email || !password) {
       return res.status(400).json({ message: "Please fill in all of the required fields" });
     }
@@ -159,11 +160,11 @@ app.get("/isAuthorised/:email", async (req, res) => {
     const { email } = req.params;
 
     const collection = mongoose.connection.collection("users");
-    console.log("Email destructured from isAuthorised endpoint: ",email)
+    console.log("Email destructured from isAuthorised endpoint: ", email)
 
     const user = await collection.findOne({ lowerCase: email });
 
-    console.log("The authorised endpoint: ",user)
+    console.log("The authorised endpoint: ", user)
 
     if (!user) {
       return res.status(401).json({ message: "User is not signed in" })
@@ -236,12 +237,15 @@ app.get("/seatPaymentsHistory/:email", async (req, res) => {
     const { email } = req.params
 
     // To make sure that the latest booking shows up first you need to use the .reverse() method in the CRUD function in the frontend
-    const user = await collection.find({ bookedBy:email }).toArray();
+    const user = await collection.find({ bookedBy: email }).toArray();
 
-    if ( user.length === 0 ) {
-      return res.status(404).json({ message: "No booking history available", seatHistory: [{ venueName:"You do not have any booking history available",
-        _id:"err"
-      }] })
+    if (user.length === 0) {
+      return res.status(404).json({
+        message: "No booking history available", seatHistory: [{
+          venueName: "You do not have any booking history available",
+          _id: "err"
+        }]
+      })
     }
     return res.status(200).json({ message: "Seat history successfully found", seatHistory: user })
 
@@ -389,7 +393,7 @@ app.post("/newVenue/:email",
 
       const { email } = req.params;
 
-      const admin = usersCollection.findOne({ email });
+      const admin = await usersCollection.findOne({ email });
 
       if (!admin) {
         return res.status(401).json({ message: "You are not authorised to perform this action" });
@@ -403,21 +407,40 @@ app.post("/newVenue/:email",
         number,
         registrationNo,
         address,
-        documents,
         facilities,
         numberOfSeats,
         seatRows,
         seatColumns,
       } = req.body
 
-      
+      // const imagesArr = [];
 
-      const images = req.files.images.map((imageObj) => {
-        return {
-          buffer: imageObj.buffer,
-          size: imageObj.size
+      const images = await Promise.all(req.files.images.map(async (imageObj) => {
+
+        const oneImageObj = {
+          ...imageObj
         }
-      })
+
+        // console.log(oneImageObj)
+
+        const supabaseImages = await uploadImages(oneImageObj);
+        // console.log("What is supabase returning: ", supabaseImages)
+        return supabaseImages;
+      }))
+
+       const documents = await Promise.all(req.files.documents.map(async (documentObj) => {
+
+        const oneDocumentObj = {
+          ...documentObj
+        }
+
+        const supabaseDocuments = await uploadImages(oneDocumentObj);
+        // console.log("What is supabase returning: ", supabaseDocuments)
+        return supabaseDocuments;
+      }))
+
+      // console.log("The variable that should hold everything being mapped through: ", images)
+
 
       const seatArrangement = [];
       let seatNames = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
@@ -427,7 +450,7 @@ app.post("/newVenue/:email",
         let rowNumber = seatNames[i];
         for (let j = 0; j < parseInt(seatColumns); j++) {
           let seat = {
-            seat: `${rowNumber}${j+1}`,
+            seat: `${rowNumber}${j + 1}`,
             isBooked: false
           };
           arr.push(seat);
@@ -444,7 +467,7 @@ app.post("/newVenue/:email",
       else {
 
         const venueCollection = mongoose.connection.collection("venues");
-        await venueCollection.insertOne({ ...req.body, seatArrangement:seatArrangement, email:email, images:images, createdAt: new Date() })
+        await venueCollection.insertOne({ ...req.body, seatArrangement: seatArrangement, email, images, documents, createdAt: new Date() })
         return res.status(200).json({ message: "Vanue has been successfully created." });
       }
     } catch (error) {
@@ -508,7 +531,7 @@ app.get("/venueBookingHistory", async (req, res) => {
 // Endpoint used to book a venue
 app.post("/bookingVenue", async (req, res) => {
   try {
-    
+
   } catch (error) {
 
   }
@@ -533,16 +556,16 @@ app.get("/upcomingEvent", async (req, res) => {
     const collection = mongoose.connection.collection("events");
     const events = await collection.find({}).toArray();
 
-    if(events.length === 0){
-      return res.status(404).json({ message: [{venue:"There are no upcoming events"}]});
+    if (events.length === 0) {
+      return res.status(404).json({ message: [{ venue: "There are no upcoming events" }] });
     }
 
     else {
-      return res.status(200).json({message: events });
+      return res.status(200).json({ message: events });
     }
   } catch (error) {
-console.error("There was an error trying to fetch all ofthe upcoming events: ",error);
-return res.status(500).json({message:"Internal Server Error"})
+    console.error("There was an error trying to fetch all ofthe upcoming events: ", error);
+    return res.status(500).json({ message: "Internal Server Error" })
   }
 });
 

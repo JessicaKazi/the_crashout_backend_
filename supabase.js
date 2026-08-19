@@ -12,14 +12,38 @@ import { createClient } from '@supabase/supabase-js'
 export const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY)
 
 // Upload images using standard upload
-const uploadImages = async (file, res) => {
+ export const uploadImages = async (file) => {
 
-    const { data, error } = await supabase.storage.from('venue').upload(`images/${Date.now()}-${file.originalname}`, file.buffer)
+    const { data, error } = await supabase.storage.from('venues').upload(`images/${Date.now()}-${file.originalname}`, file.buffer);
     if (error) {
         console.error(error)
-        res.status(400).json({ message: "Unable to load the image into supabase" });
+       return  error ;
     } else {
-        res.status(200).json({ message: "Successfully loaded the images into supabase", data })
+      const { path } = data;
+      
+      const imageFilePath = await supabase.storage.from("venues").getPublicUrl(path) ;
+
+      const url = imageFilePath.data.publicUrl
+      return url ;
     }
 
+}
+
+// Uploading the documents into the database 
+
+export const uploadDocuments = async (file) =>{
+    const { data, error } = await supabase.storage.from('venues').upload(`documents/${Date.now()}-${file.originalname}`, file.buffer);
+
+    if(error){
+        console.error(error);
+        return  error;
+    }
+
+    else{
+const { path } = data;
+const documentUrl = await supabase.storage("venues").getPublicUrl(path);
+
+const url = documentUrl.data.publicUrl;
+return url;
+    }
 }
