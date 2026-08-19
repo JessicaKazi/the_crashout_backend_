@@ -13,7 +13,7 @@ export const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPAB
 
 // Upload images using standard upload
  export const uploadImages = async (file) => {
-
+ 
     const { data, error } = await supabase.storage.from('venues').upload(`images/${Date.now()}-${file.originalname}`, file.buffer);
     if (error) {
         console.error(error)
