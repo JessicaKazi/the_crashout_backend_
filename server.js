@@ -34,7 +34,6 @@ mongoose.connect(process.env.MONGO_URI)
     console.error("Connection Error:", err);
   });
 
-
 // SIGNUP ENDPOINT
 app.post("/signup", async (req, res) => {
   try {
