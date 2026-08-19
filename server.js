@@ -578,19 +578,19 @@ app.get("/upcomingEvent", async (req, res) => {
 app.post("/postForms", async (req, res) => {
 
   try {
-    const { email, subject } = req.body;
+    const { fullName, email, message } = req.body;
     const collection = mongoose.connection.collection("forms");
 
-    if (!email || !subject) {
-      return res.status(404).json({ message: "Email and subject are required" });
+    if (!fullName || !email || !message) {
+      return res.status(404).json({ message: "Please fill in all of the inputs below in order your form to be submitted" });
     }
 
     const result = await collection.insertOne({ ...req.body, createdAt: new Date() });
 
-    return res.status(201).json({ message: "Your form has been sent and received by administration" });
+    return res.status(200).json({ message: "Your form has been sent and received by administration" });
   } catch (error) {
     console.error("Unable to send and store the request", error);
-    return res.status(500).json({ message: "Intenral server error" });
+    return res.status(500).json({ message: "Intenral server error, please try again later" });
   }
 });
 
