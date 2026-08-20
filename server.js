@@ -201,7 +201,7 @@ app.put("/resetPassword", async (req, res) => {
     }
 
     if (password && resetPassword === confirmPassword) {
-      const user = await collection.updateOne({ userId: userId }, { $set: { password: resetPassword } });
+      const user = await collection.updateOne({ lowerCase: email }, { $set: { password: resetPassword } });
       return res.status(200).json({ message: "Password has been updated" })
     }
 
@@ -221,7 +221,7 @@ app.get("/myProfile/:email", async (req, res) => {
     const collection = await mongoose.connection.collection("users");
     const { email } = req.params;
 
-    const user = await collection.findOne({ email })
+    const user = await collection.findOne({ lowerCase: email })
 
     return res.status(200).json({ message: "Data successfully collected", userProfileInfo: user })
 
@@ -237,7 +237,7 @@ app.get("/myProfile/:email", async (req, res) => {
 app.get("/seatPaymentsHistory/:email", async (req, res) => {
   try {
 
-    const collection = await mongoose.connection.collection("payments");
+    const collection = mongoose.connection.collection("payments");
     const { email } = req.params
 
     // To make sure that the latest booking shows up first you need to use the .reverse() method in the CRUD function in the frontend
@@ -271,7 +271,7 @@ app.get("/userByUserName/:email", async (req, res) => {
     // We must first verify that the person who wants to access this information is an admin
     const { email } = req.params;
 
-    const admin = await collection.findOne({ email })
+    const admin = await collection.findOne({ lowerCase: email })
 
     // Checking to make sure that the person who is trying to change a user's role is an admin
     if (!admin || admin.role !== "admin") {
@@ -308,7 +308,7 @@ app.post("/changeUserRoles/:email", async (req, res) => {
 
     const collection = await mongoose.connection.collection("users");
 
-    const admin = await collection.findOne({ email });
+    const admin = await collection.findOne({ lowerCase: email });
 
     // Checking to make sure that the person who is trying to change a user's role is an admin
 
@@ -436,7 +436,7 @@ app.post("/newVenue/:email",
           ...documentObj
         }
 
-        const supabaseDocuments = await uploadImages(oneDocumentObj);
+        const supabaseDocuments = await uploadDocuments(oneDocumentObj);
         // console.log("What is supabase returning: ", supabaseDocuments)
         return supabaseDocuments;
       }))
@@ -461,8 +461,6 @@ app.post("/newVenue/:email",
 
       }
 
-
-
       if (!venueName || !numberOfSeats || !address /*|| !ownerInformation || !pricePerSeat || !seatArrangement*/) {
         return res.status(400).json({ message: "Please fill in the necessary information to create and event." });
       }
@@ -478,6 +476,45 @@ app.post("/newVenue/:email",
     }
   });
 
+// ENDPOINT USED TO GET ALL OF THE VENUES AND DISPLAY THEM TO MANAGERS AND ADMINS
+app.get("/allVenues", async (req, res) => {
+
+  try{
+
+  const collection = mongoose.connection.collection("venues");
+  const allVenues = await collection.find().toArray();
+
+  console.log("Number of venues inside the database: ", allVenues.length)
+ 
+  return res.status(200).json({ message: allVenues });
+
+  } catch (error) {
+    console.error("There was an error trying to get all of the venues: ",error);
+    return res.status(500).json({ message:"Internal server error" });
+  }
+})
+
+app.get("/myVenues/:email", async(req,res) =>{
+  try{
+    const { email } = req.params;
+
+    const collection = mongoose.connection.collection("venues");
+    const personalVenues = await collection.find({ email }).toArray();
+ 
+    console.log("Number of personal venues inside the database: ", personalVenues.length)
+    
+    if( personalVenues ){
+return res.status(200).json({ message: personalVenues });
+    }
+     else{
+return res.status(200).json({ message: "Unable to collect venues, does user have any created venues available." });
+    }
+
+  } catch (error) {
+    console.error("Error while trying to get a managers personal venues", error);
+    res.status(500).json({ message: "Internal server error" })
+  }
+})
 
 
 
