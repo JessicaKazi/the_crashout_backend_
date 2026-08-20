@@ -522,7 +522,7 @@ return res.status(200).json({ message: "Unable to collect venues, does user have
 
 
 
-// Endpoint used to delete a venue that will no longer be shown on the app
+// Endpoint used to delete a venue 
 app.delete("/removeMyVenue/venueName", async (req, res) => {
   try {
     const { venueName } = req.params
@@ -546,8 +546,10 @@ app.delete("/removeMyVenue/venueName", async (req, res) => {
 // Endpoint used to update the information of an existing venue
 app.put("/venueUpdate", async (req, res) => {
   try {
+
   }
   catch (error) {
+
   }
 });
 
@@ -556,7 +558,6 @@ app.put("/venueUpdate", async (req, res) => {
 // Endpoint used to get all the times a venue was booked based on the venue id
 app.get("/venueBookingHistory", async (req, res) => {
   try {
-
 
   } catch (error) {
 
@@ -579,7 +580,7 @@ app.post("/bookingVenue", async (req, res) => {
 // Edit an event that is already public
 app.put("/editUpcomingEvent", async (req, res) => {
   try {
-    h
+    
   } catch (error) {
 
   }
@@ -600,6 +601,7 @@ app.get("/upcomingEvent", async (req, res) => {
     else {
       return res.status(200).json({ message: events });
     }
+
   } catch (error) {
     console.error("There was an error trying to fetch all ofthe upcoming events: ", error);
     return res.status(500).json({ message: "Internal Server Error" })
