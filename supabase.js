@@ -42,7 +42,7 @@ export const uploadDocuments = async (file) =>{
     else{
 const { path } = data;
 
-const documentUrl = await supabase.storage("venues").getPublicUrl(path);
+const documentUrl = await supabase.storage.from("venues").getPublicUrl(path);
 
 const url = documentUrl.data.publicUrl;
 return url;
