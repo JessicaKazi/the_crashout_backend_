@@ -586,6 +586,14 @@ app.put("/editUpcomingEvent", async (req, res) => {
   }
 });
 
+// Jesicas endpoint called routes
+app.put("/routes", async (req, res) => {
+  try {
+    
+  } catch (error) {
+
+  }
+});
 
 
 // Endpoint used to get all the events that are coming to display it
