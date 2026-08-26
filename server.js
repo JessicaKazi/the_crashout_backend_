@@ -90,6 +90,7 @@ app.post("/signup", async (req, res) => {
         lowerCase: lowerCase,
         role: "customer", //EVERY NEW USER MUST BE GIVEN THE DEFAULT ROLE OF CUSTOMER ON THEIR INITIAL SIGNUP
         userName: "@" + newUserName,
+        actualName:userName,
         createdAt: new Date()
       })
 
@@ -525,7 +526,7 @@ return res.status(200).json({ message: "Unable to collect venues, does user have
 
 
 // Endpoint used to delete a venue 
-app.delete("/removeMyVenue/venueName", async (req, res) => {
+app.delete("/removeMyVenue/:venueName", async (req, res) => {
   try {
     const { venueName } = req.params
     const collection = mongoose.connection.collection("venues");
@@ -569,11 +570,52 @@ app.get("/venueBookingHistory", async (req, res) => {
 
 
 // Endpoint used to book a venue
-app.post("/bookingVenue", async (req, res) => {
+app.post("/bookVenue/:email", async (req, res) => {
   try {
 
-  } catch (error) {
+    const { venueName, eventDate } = req.body;
 
+    const { email } = req.params;
+const userCollections = mongoose.connection.collection("users");
+const collection = mongoose.connection.collection("events");
+
+const user = await userCollections.findOne({ lowerCase: email });
+
+if(!user){
+  return res.status(404).json({ message: "Unable to perform this action because you are not logged in. Log out, log in again and try to perform the action again" });
+}
+else if( user.role === "customer"){
+  return res.status(404).json({ message: "Does not seem like you have no authorization to perform action, contact the reception for inquiries." });
+}
+
+console.log("Venue being booked: ", req.body.venueName);
+
+// Finding all of the events this veue has been booked for
+const events = await collection.find({ venueName }).toArray();
+
+
+// console.log( "all the event that are upcoming for that venue:",events)
+
+// Checking to see if the venue is about to be doublebooked
+const doubleBooking = await events.filter((item)=>{ return item.eventDate === eventDate });
+// console.log( "all the event that are being double booked :",doubleBooking)
+if( doubleBooking.length != 0 ){
+return res.status(409).json({ message:"The venue has already been booked on this particular day please select a different date to host your event "});
+}
+else{
+  
+  // removing the propertys unique id so that only the mongodb one doesnt clash with the original one. 
+  delete req.body["_id"];
+
+const update = await collection.insertOne({ ...req.body });
+console.log( "Event successfully created ");
+return res.status(200).json({ message: "Event has been successfully created and booked "});
+}
+
+  }
+   catch (error) {
+console.error("Error trying to book a venue and create a neww event: ", error);
+return res.status(500).json({ message:"Internal server error, please try again later"})
   }
 });
 
