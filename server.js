@@ -88,6 +88,7 @@ app.post("/signup", async (req, res) => {
         lowerCase: lowerCase,
         role: "customer", //EVERY NEW USER MUST BE GIVEN THE DEFAULT ROLE OF CUSTOMER ON THEIR INITIAL SIGNUP
         userName: "@" + newUserName,
+        actualName:userName,
         createdAt: new Date()
       })
 
@@ -523,7 +524,7 @@ return res.status(200).json({ message: "Unable to collect venues, does user have
 
 
 // Endpoint used to delete a venue 
-app.delete("/removeMyVenue/venueName", async (req, res) => {
+app.delete("/removeMyVenue/:venueName", async (req, res) => {
   try {
     const { venueName } = req.params
     const collection = mongoose.connection.collection("venues");
