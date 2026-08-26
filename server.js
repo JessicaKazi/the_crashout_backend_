@@ -18,6 +18,8 @@ const upload = multer({ storage });
 process.env.SUPABASE_URL
 process.env.SUPABASE_SECRET_KEY
 
+// PayStack setup
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
 // const auth = getAuth();
 const app = express();
@@ -592,6 +594,49 @@ app.put("/routes", async (req, res) => {
     
   } catch (error) {
 
+  }
+});
+
+// PayStack endpoints
+
+app.post('/api/paystack/initialize', async (req, res) => {
+  try {
+    const { email, amount } = req.body;
+
+    const response = await axios.post(
+      'https://api.paystack.co/transaction/initialize',
+      { email, amount },
+      {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+// Verify Transaction
+
+app.get('/api/paystack/verify/:reference', async (req, res) => {
+  const { reference } = req.params;
+  try {
+    const response = await axios.get(
+      `https://api.paystack.co/transaction/verify/${reference}`,
+      {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        },
+      }
+    );
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: error.response?.data || error.message });
   }
 });
 
