@@ -521,8 +521,6 @@ return res.status(200).json({ message: "Unable to collect venues, does user have
 
 // 6 endpoints left
 
-
-
 // Endpoint used to delete a venue 
 app.delete("/removeMyVenue/:venueName", async (req, res) => {
   try {
