@@ -88,7 +88,7 @@ app.post("/signup", async (req, res) => {
         lowerCase: lowerCase,
         role: "customer", //EVERY NEW USER MUST BE GIVEN THE DEFAULT ROLE OF CUSTOMER ON THEIR INITIAL SIGNUP
         userName: "@" + newUserName,
-        actualName:userName,
+        actualName: userName,
         createdAt: new Date()
       })
 
@@ -165,11 +165,11 @@ app.get("/isAuthorised/:email", async (req, res) => {
     const { email } = req.params;
 
     const collection = mongoose.connection.collection("users");
-    console.log("Email destructured from isAuthorised endpoint: ", email)
+    // console.log("Email destructured from isAuthorised endpoint: ", email)
 
     const user = await collection.findOne({ lowerCase: email });
 
-    console.log("The authorised endpoint: ", user)
+    // console.log("The authorised endpoint: ", user)
 
     if (!user) {
       return res.status(401).json({ message: "User is not signed in" })
@@ -358,24 +358,80 @@ app.post("/bookingSeat", async (req, res) => {
   try {
 
     const collection = await mongoose.connection.collection("payments");
+    const eventsCollection = await mongoose.connection.collection("events");
 
-    const { email, bookingPrice, eventDate, bookedBy, numberOfSeats, seatNumber, venueName, address } = req.body;
+    const { email, bookingPrice, eventDate, bookedBy, numberOfSeats, seatNumber, venueName, address, eventName } = req.body;
     // Do not need to have the userid validted but need the booking id counter to create the booking id for the event
 
-    if (!bookingPrice || !eventDate || !bookedBy || !venueName || !address || !numberOfSeats || seatNumber) {
+    console.log("Object that is actually being sent through the endpoint",req.body)
+    const event = await eventsCollection.findOne({ eventName });
+
+    // SeatNumber represents an array of all of the seats that are going to be booked by a user
+    if (!bookingPrice || !eventDate || !bookedBy || !venueName || !address || !numberOfSeats || !seatNumber) {
       return res.status(409).json({ message: "Please fill in all the required fields to finish booking your seat." });
+    }
+
+    if (!event) {
+      return res.status(404).json({ message: "The current even that you are trying to book a seat at is not found; it might be unavailable." });
     }
 
     else {
 
+      // ARRAY USED TO STORE THE SEATING ARRANGEMENT THAT NEEDS TO BE UPDATED
+      const newSeatArrangement = [];
+
+      // THE SEATING ARRANGEMENT THAT WILL BE UPDATED
+      const currentSeatArrangement = event.seatArrangement;
+
+      // seatNumber from the req.body is actually an array of all of the seats that need to be booked;
+      //  so you must basically compare the actual shoes with "seatNumber"
+
+      console.log("Seat arrangement to be updated length: ", currentSeatArrangement.length);
+
+console.log("seatNumber array that has the seats being booked: ", seatNumber)
+
+      for (let arr of currentSeatArrangement) {
+
+        const linearArray = [];
+
+        for (let i = 0; i < arr.length; i++) {
+
+
+          if (seatNumber.includes(arr[i]["seat"])) {
+            linearArray.push({ ...arr[i], isBooked: true });
+          }
+          else {
+            linearArray.push(arr[i]);
+          }
+
+        }
+
+        newSeatArrangement.push(linearArray);
+
+      }
+
+// FINALLY SAVING A USERS BOOKING INSIDE OF THE PAYMENTS COLLECTION 
       const user = await collection.insertOne({
-        ...req.body, createdAt: new Date()
+        
+email,
+bookingPrice,
+eventDate,
+bookedBy,
+numberOfSeats,
+seatNumber,
+venueName,
+address,
+eventName,
+createdAt: new Date()
       });
 
-      return res.status(200).json({ message: "Seat has been successfully booked." })
+      const user2 = await eventsCollection.updateOne({ eventName }, { $set : { seatArrangement: newSeatArrangement } })
+console.log("newSeatArrangement: ",newSeatArrangement)
+      return res.status(200).json({ message: "Seat has been successfully booked.", seatArrangement: newSeatArrangement })
     }
 
   } catch (error) {
+
     console.error("booking a seat endpoint: ", error);
     return res.status(500).json({ message: "Internal Server Error" });
 
@@ -431,7 +487,7 @@ app.post("/newVenue/:email",
         return supabaseImages;
       }))
 
-       const documents = await Promise.all(req.files.documents.map(async (documentObj) => {
+      const documents = await Promise.all(req.files.documents.map(async (documentObj) => {
 
         const oneDocumentObj = {
           ...documentObj
@@ -480,35 +536,35 @@ app.post("/newVenue/:email",
 // ENDPOINT USED TO GET ALL OF THE VENUES AND DISPLAY THEM TO MANAGERS AND ADMINS
 app.get("/allVenues", async (req, res) => {
 
-  try{
+  try {
 
-  const collection = mongoose.connection.collection("venues");
-  const allVenues = await collection.find().toArray();
+    const collection = mongoose.connection.collection("venues");
+    const allVenues = await collection.find().toArray();
 
-  console.log("Number of venues inside the database: ", allVenues.length)
- 
-  return res.status(200).json({ message: allVenues });
+    console.log("Number of venues inside the database: ", allVenues.length)
+
+    return res.status(200).json({ message: allVenues });
 
   } catch (error) {
-    console.error("There was an error trying to get all of the venues: ",error);
-    return res.status(500).json({ message:"Internal server error" });
+    console.error("There was an error trying to get all of the venues: ", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 })
 
-app.get("/myVenues/:email", async(req,res) =>{
-  try{
+app.get("/myVenues/:email", async (req, res) => {
+  try {
     const { email } = req.params;
 
     const collection = mongoose.connection.collection("venues");
     const personalVenues = await collection.find({ email }).toArray();
- 
+
     console.log("Number of personal venues inside the database: ", personalVenues.length)
-    
-    if( personalVenues ){
-return res.status(200).json({ message: personalVenues });
+
+    if (personalVenues) {
+      return res.status(200).json({ message: personalVenues });
     }
-     else{
-return res.status(200).json({ message: "Unable to collect venues, does user have any created venues available." });
+    else {
+      return res.status(200).json({ message: "Unable to collect venues, does user have any created venues available." });
     }
 
   } catch (error) {
@@ -574,46 +630,46 @@ app.post("/bookVenue/:email", async (req, res) => {
     const { venueName, eventDate } = req.body;
 
     const { email } = req.params;
-const userCollections = mongoose.connection.collection("users");
-const collection = mongoose.connection.collection("events");
+    const userCollections = mongoose.connection.collection("users");
+    const collection = mongoose.connection.collection("events");
 
-const user = await userCollections.findOne({ lowerCase: email });
+    const user = await userCollections.findOne({ lowerCase: email });
 
-if(!user){
-  return res.status(404).json({ message: "Unable to perform this action because you are not logged in. Log out, log in again and try to perform the action again" });
-}
-else if( user.role === "customer"){
-  return res.status(404).json({ message: "Does not seem like you have no authorization to perform action, contact the reception for inquiries." });
-}
+    if (!user) {
+      return res.status(404).json({ message: "Unable to perform this action because you are not logged in. Log out, log in again and try to perform the action again" });
+    }
+    else if (user.role === "customer") {
+      return res.status(404).json({ message: "Does not seem like you have no authorization to perform action, contact the reception for inquiries." });
+    }
 
-console.log("Venue being booked: ", req.body.venueName);
+    console.log("Venue being booked: ", req.body.venueName);
 
-// Finding all of the events this veue has been booked for
-const events = await collection.find({ venueName }).toArray();
+    // Finding all of the events this veue has been booked for
+    const events = await collection.find({ venueName }).toArray();
 
 
-// console.log( "all the event that are upcoming for that venue:",events)
+    // console.log( "all the event that are upcoming for that venue:",events)
 
-// Checking to see if the venue is about to be doublebooked
-const doubleBooking = await events.filter((item)=>{ return item.eventDate === eventDate });
-// console.log( "all the event that are being double booked :",doubleBooking)
-if( doubleBooking.length != 0 ){
-return res.status(409).json({ message:"The venue has already been booked on this particular day please select a different date to host your event "});
-}
-else{
-  
-  // removing the propertys unique id so that only the mongodb one doesnt clash with the original one. 
-  delete req.body["_id"];
+    // Checking to see if the venue is about to be doublebooked
+    const doubleBooking = await events.filter((item) => { return item.eventDate === eventDate });
+    // console.log( "all the event that are being double booked :",doubleBooking)
+    if (doubleBooking.length != 0) {
+      return res.status(409).json({ message: "The venue has already been booked on this particular day please select a different date to host your event " });
+    }
+    else {
 
-const update = await collection.insertOne({ ...req.body });
-console.log( "Event successfully created ");
-return res.status(200).json({ message: "Event has been successfully created and booked "});
-}
+      // removing the propertys unique id so that only the mongodb one doesnt clash with the original one. 
+      delete req.body["_id"];
+
+      const update = await collection.insertOne({ ...req.body });
+      console.log("Event successfully created ");
+      return res.status(200).json({ message: "Event has been successfully created and booked " });
+    }
 
   }
-   catch (error) {
-console.error("Error trying to book a venue and create a neww event: ", error);
-return res.status(500).json({ message:"Internal server error, please try again later"})
+  catch (error) {
+    console.error("Error trying to book a venue and create a neww event: ", error);
+    return res.status(500).json({ message: "Internal server error, please try again later" })
   }
 });
 
@@ -622,7 +678,7 @@ return res.status(500).json({ message:"Internal server error, please try again l
 // Edit an event that is already public
 app.put("/editUpcomingEvent", async (req, res) => {
   try {
-    
+
   } catch (error) {
 
   }
@@ -631,7 +687,7 @@ app.put("/editUpcomingEvent", async (req, res) => {
 // Jesicas endpoint called routes
 app.put("/routes", async (req, res) => {
   try {
-    
+
   } catch (error) {
 
   }
