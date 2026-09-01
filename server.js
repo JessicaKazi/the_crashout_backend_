@@ -18,13 +18,22 @@ const upload = multer({ storage });
 process.env.SUPABASE_URL
 process.env.SUPABASE_SECRET_KEY
 
+// PayStack setup
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+
+// Google Maps
+const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 // const auth = getAuth();
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 // Allow requests specifically from your frontend port
-app.use(cors());
+app.use(cors({origin: ["http://localhost:5173","https://the-crashouts-frontend.vercel.app"]}));
+
+app.get("/", (req, res) => {
+    res.send("The ReserveX backend is running!");
+});
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
@@ -685,13 +694,101 @@ app.put("/editUpcomingEvent", async (req, res) => {
 });
 
 // Jesicas endpoint called routes
-app.put("/routes", async (req, res) => {
+app.post('/api/save-address', async (req, res) => {
+  const { placeId } = req.body;
+
   try {
+    // Fetch detailed place information using Google Places Details API
+    const response = await axios.get(
+      `https://maps.googleapis.com/maps/api/place/details/json`,
+      {
+        params: {
+          place_id: placeId,
+          key: GOOGLE_API_KEY,
+        },
+      }
+    );
 
+    const placeDetails = response.data.result;
+
+    // TODO: Save placeDetails.formatted_address, lat, lng to your database here
+
+    res.status(200).json({
+      success: true,
+      address: placeDetails.formatted_address,
+      location: placeDetails.geometry.location,
+    });
   } catch (error) {
-
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch address details' });
   }
 });
+
+// PayStack endpoints
+
+// app.post('/api/paystack/initialize', async (req, res) => {
+//   try {
+//     const { email, amount } = req.body;
+
+//     const response = await axios.post(
+//       'https://api.paystack.co/transaction/initialize',
+//       { email, amount },
+//       {
+//         headers: {
+//           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+//           'Content-Type': 'application/json',
+//         },
+//       }
+//     );
+
+//     res.status(200).json(response.data);
+//   } catch (error) {
+//     res.status(500).json({ error: error.response?.data || error.message });
+//   }
+// });
+
+// // Verify Transaction
+
+// app.get('/api/paystack/verify/:reference', async (req, res) => {
+//   const { reference } = req.params;
+//   try {
+//     const response = await axios.get(
+//       `https://api.paystack.co/transaction/verify/${reference}`,
+//       {
+//         headers: {
+//           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+//         },
+//       }
+//     );
+
+//     res.status(200).json(response.data);
+//   } catch (error) {
+//     res.status(500).json({ error: error.response?.data || error.message });
+//   }
+// });
+
+const handlePayment = async (e) => {
+  e.preventDefault();
+
+  if (!email || !name) {
+    alert("Please fill in all fields.");
+    return;
+  }
+
+  try {
+    const initResponse = await axios.post("http://localhost:5173/api/paystack/initialize", {
+      email,
+      amount, // amount in cents
+    });
+
+    const { authorization_url, reference } = initResponse.data.data;
+    window.location.href = authorization_url;
+
+  } catch (error) {
+    console.error("Initialization error:", error);
+    alert("Could not start payment.");
+  }
+};
 
 
 // Endpoint used to get all the events that are coming to display it
