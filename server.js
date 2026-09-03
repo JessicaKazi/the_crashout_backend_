@@ -29,7 +29,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 // Allow requests specifically from your frontend port
-app.use(cors({origin: ["http://localhost:5173","https://the-crashouts-frontend.vercel.app"]}));
+app.use(cors({origin: ["http://localhost:5173", process.env.FRONTEND_URL]}));
 
 app.get("/", (req, res) => {
     res.send("The ReserveX backend is running!");
