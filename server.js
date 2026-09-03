@@ -81,23 +81,21 @@ app.post("/signup", async (req, res) => {
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const accessToken = userCredential.user;
-      console.log(accessToken);
+      // console.log(accessToken);
 
-      // Formatting provided for the username so that the users username will look like an instagram handle
-      const newUserName = userName.replaceAll(" ", "").toLowerCase();
+      // // Formatting provided for the username so that the users username will look like an instagram handle
+      // const newUserName = userName.replaceAll(" ", "").toLowerCase();
 
 
       // Changing all of the email characters to lowercase
       // because firebase always returns an email in lowercase when a user signs in.
-      const lowerCase = email.toLowerCase();
+      // const lowerCase = email.toLowerCase();
 
       // Saving a user in mongoDB once they have been successfully signed up with fire base
       const result = await collection.insertOne({
         email: email,
-        lowerCase: lowerCase,
         role: "customer", //EVERY NEW USER MUST BE GIVEN THE DEFAULT ROLE OF CUSTOMER ON THEIR INITIAL SIGNUP
-        userName: "@" + newUserName,
-        actualName: userName,
+        userName: userName,
         createdAt: new Date()
       })
 
@@ -144,7 +142,7 @@ app.post("/login", async (req, res) => {
     else {
       const userCredentials = await signInWithEmailAndPassword(auth, email, password);
       const firebaseAccessToken = await userCredentials.user.email;
-      console.log(userCredentials.user.accessToken)
+      // console.log(userCredentials.user.accessToken)
       // console.log(firebaseAccessToken)
       // console.log( email )
       return res.status(200).json({ message: "You have been successfully logged into your account", accessToken: firebaseAccessToken })
@@ -271,8 +269,8 @@ app.get("/seatPaymentsHistory/:email", async (req, res) => {
 
 
 
-// Endpoint used to get the user whose role we want to change 
-app.get("/userByUserName/:email", async (req, res) => {
+// Endpoint used to get all of the user whose role we want to change 
+app.get("/getAllUsers/:email", async (req, res) => {
   try {
 
     const collection = mongoose.connection.collection("users");
@@ -288,16 +286,15 @@ app.get("/userByUserName/:email", async (req, res) => {
       return res.status(401).json({ message: "You do not have authorised access to perform this task" });
     }
 
-    const { userName } = req.body;
 
-    const user = await collection.findOne({ userName });
+    const users = await collection.find().toArray();
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
+    if (!users) {
+      return res.status(404).json({ message: "Users currently unavailable." });
     }
 
     else {
-      return res.status(200).json({ message: "User found.", userName: user.userName, role: user.role })
+      return res.status(200).json({ message: users })
     }
   }
   catch (error) {
@@ -372,7 +369,7 @@ app.post("/bookingSeat", async (req, res) => {
     const { email, bookingPrice, eventDate, bookedBy, numberOfSeats, seatNumber, venueName, address, eventName } = req.body;
     // Do not need to have the userid validted but need the booking id counter to create the booking id for the event
 
-    console.log("Object that is actually being sent through the endpoint",req.body)
+    // console.log("Object that is actually being sent through the endpoint",req.body)
     const event = await eventsCollection.findOne({ eventName });
 
     // SeatNumber represents an array of all of the seats that are going to be booked by a user
@@ -435,7 +432,7 @@ createdAt: new Date()
       });
 
       const user2 = await eventsCollection.updateOne({ eventName }, { $set : { seatArrangement: newSeatArrangement } })
-console.log("newSeatArrangement: ",newSeatArrangement)
+// console.log("newSeatArrangement: ",newSeatArrangement)
       return res.status(200).json({ message: "Seat has been successfully booked.", seatArrangement: newSeatArrangement })
     }
 
