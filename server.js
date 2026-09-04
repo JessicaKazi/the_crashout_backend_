@@ -344,7 +344,15 @@ app.post("/changeUserRoles/:email", async (req, res) => {
     }
 
     else if (role == "customer") {
-      const user = await collection.updateOne({ userNarme }, { $set: { role } });
+      const user = await collection.updateOne({ userName }, { $set: { role } });
+      const change = await collection.findOne({ userName })
+      return res.status(200).json({
+        message: "User role has been successfully updated to customer", changedRole: change
+      })
+    }
+
+     else if (role == "admin") {
+      const user = await collection.updateOne({ userName }, { $set: { role } });
       const change = await collection.findOne({ userName })
       return res.status(200).json({
         message: "User role has been successfully updated to customer", changedRole: change
