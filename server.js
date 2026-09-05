@@ -410,9 +410,12 @@ console.log("seatNumber array that has the seats being booked: ", seatNumber)
 
         for (let i = 0; i < arr.length; i++) {
 
-
           if (seatNumber.includes(arr[i]["seat"])) {
-            linearArray.push({ ...arr[i], isBooked: true });
+
+            // Changing the value of the seat to true so that it cannot be double booked and
+            // adding the booked by attribute so that a user can reverse the seat that has been booked
+
+            linearArray.push({ ...arr[i], isBooked: true, bookedBy });
           }
           else {
             linearArray.push(arr[i]);
@@ -524,7 +527,8 @@ app.post("/newVenue/:email",
         for (let j = 0; j < parseInt(seatColumns); j++) {
           let seat = {
             seat: `${rowNumber}${j + 1}`,
-            isBooked: false
+            isBooked: false,
+            bookedBy: ""
           };
           arr.push(seat);
         }
