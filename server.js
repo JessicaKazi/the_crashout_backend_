@@ -18,13 +18,22 @@ const upload = multer({ storage });
 process.env.SUPABASE_URL
 process.env.SUPABASE_SECRET_KEY
 
+// PayStack setup
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+
+// Google Maps
+const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 // const auth = getAuth();
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 // Allow requests specifically from your frontend port
-app.use(cors());
+app.use(cors({origin: ["http://localhost:5173", process.env.FRONTEND_URL]}));
+
+app.get("/", (req, res) => {
+    res.send("The ReserveX backend is running!");
+});
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
@@ -72,23 +81,21 @@ app.post("/signup", async (req, res) => {
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const accessToken = userCredential.user;
-      console.log(accessToken);
+      // console.log(accessToken);
 
-      // Formatting provided for the username so that the users username will look like an instagram handle
-      const newUserName = userName.replaceAll(" ", "").toLowerCase();
+      // // Formatting provided for the username so that the users username will look like an instagram handle
+      // const newUserName = userName.replaceAll(" ", "").toLowerCase();
 
 
       // Changing all of the email characters to lowercase
       // because firebase always returns an email in lowercase when a user signs in.
-      const lowerCase = email.toLowerCase();
+      // const lowerCase = email.toLowerCase();
 
       // Saving a user in mongoDB once they have been successfully signed up with fire base
       const result = await collection.insertOne({
         email: email,
-        lowerCase: lowerCase,
         role: "customer", //EVERY NEW USER MUST BE GIVEN THE DEFAULT ROLE OF CUSTOMER ON THEIR INITIAL SIGNUP
-        userName: "@" + newUserName,
-        actualName:userName,
+        userName: userName,
         createdAt: new Date()
       })
 
@@ -135,7 +142,7 @@ app.post("/login", async (req, res) => {
     else {
       const userCredentials = await signInWithEmailAndPassword(auth, email, password);
       const firebaseAccessToken = await userCredentials.user.email;
-      console.log(userCredentials.user.accessToken)
+      // console.log(userCredentials.user.accessToken)
       // console.log(firebaseAccessToken)
       // console.log( email )
       return res.status(200).json({ message: "You have been successfully logged into your account", accessToken: firebaseAccessToken })
@@ -165,11 +172,11 @@ app.get("/isAuthorised/:email", async (req, res) => {
     const { email } = req.params;
 
     const collection = mongoose.connection.collection("users");
-    console.log("Email destructured from isAuthorised endpoint: ", email)
+    // console.log("Email destructured from isAuthorised endpoint: ", email)
 
     const user = await collection.findOne({ lowerCase: email });
 
-    console.log("The authorised endpoint: ", user)
+    // console.log("The authorised endpoint: ", user)
 
     if (!user) {
       return res.status(401).json({ message: "User is not signed in" })
@@ -262,8 +269,8 @@ app.get("/seatPaymentsHistory/:email", async (req, res) => {
 
 
 
-// Endpoint used to get the user whose role we want to change 
-app.get("/userByUserName/:email", async (req, res) => {
+// Endpoint used to get all of the user whose role we want to change 
+app.get("/getAllUsers/:email", async (req, res) => {
   try {
 
     const collection = mongoose.connection.collection("users");
@@ -279,16 +286,15 @@ app.get("/userByUserName/:email", async (req, res) => {
       return res.status(401).json({ message: "You do not have authorised access to perform this task" });
     }
 
-    const { userName } = req.body;
 
-    const user = await collection.findOne({ userName });
+    const users = await collection.find().toArray();
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
+    if (!users) {
+      return res.status(404).json({ message: "Users currently unavailable." });
     }
 
     else {
-      return res.status(200).json({ message: "User found.", userName: user.userName, role: user.role })
+      return res.status(200).json({ message: users })
     }
   }
   catch (error) {
@@ -338,7 +344,15 @@ app.post("/changeUserRoles/:email", async (req, res) => {
     }
 
     else if (role == "customer") {
-      const user = await collection.updateOne({ userNarme }, { $set: { role } });
+      const user = await collection.updateOne({ userName }, { $set: { role } });
+      const change = await collection.findOne({ userName })
+      return res.status(200).json({
+        message: "User role has been successfully updated to customer", changedRole: change
+      })
+    }
+
+     else if (role == "admin") {
+      const user = await collection.updateOne({ userName }, { $set: { role } });
       const change = await collection.findOne({ userName })
       return res.status(200).json({
         message: "User role has been successfully updated to customer", changedRole: change
@@ -358,24 +372,83 @@ app.post("/bookingSeat", async (req, res) => {
   try {
 
     const collection = await mongoose.connection.collection("payments");
+    const eventsCollection = await mongoose.connection.collection("events");
 
-    const { email, bookingPrice, eventDate, bookedBy, numberOfSeats, seatNumber, venueName, address } = req.body;
+    const { email, bookingPrice, eventDate, bookedBy, numberOfSeats, seatNumber, venueName, address, eventName } = req.body;
     // Do not need to have the userid validted but need the booking id counter to create the booking id for the event
 
-    if (!bookingPrice || !eventDate || !bookedBy || !venueName || !address || !numberOfSeats || seatNumber) {
+    // console.log("Object that is actually being sent through the endpoint",req.body)
+    const event = await eventsCollection.findOne({ eventName });
+
+    // SeatNumber represents an array of all of the seats that are going to be booked by a user
+    if (!bookingPrice || !eventDate || !bookedBy || !venueName || !address || !numberOfSeats || !seatNumber) {
       return res.status(409).json({ message: "Please fill in all the required fields to finish booking your seat." });
+    }
+
+    if (!event) {
+      return res.status(404).json({ message: "The current even that you are trying to book a seat at is not found; it might be unavailable." });
     }
 
     else {
 
+      // ARRAY USED TO STORE THE SEATING ARRANGEMENT THAT NEEDS TO BE UPDATED
+      const newSeatArrangement = [];
+
+      // THE SEATING ARRANGEMENT THAT WILL BE UPDATED
+      const currentSeatArrangement = event.seatArrangement;
+
+      // seatNumber from the req.body is actually an array of all of the seats that need to be booked;
+      //  so you must basically compare the actual shoes with "seatNumber"
+
+      console.log("Seat arrangement to be updated length: ", currentSeatArrangement.length);
+
+console.log("seatNumber array that has the seats being booked: ", seatNumber)
+
+      for (let arr of currentSeatArrangement) {
+
+        const linearArray = [];
+
+        for (let i = 0; i < arr.length; i++) {
+
+          if (seatNumber.includes(arr[i]["seat"])) {
+
+            // Changing the value of the seat to true so that it cannot be double booked and
+            // adding the booked by attribute so that a user can reverse the seat that has been booked
+
+            linearArray.push({ ...arr[i], isBooked: true, bookedBy });
+          }
+          else {
+            linearArray.push(arr[i]);
+          }
+
+        }
+
+        newSeatArrangement.push(linearArray);
+
+      }
+
+// FINALLY SAVING A USERS BOOKING INSIDE OF THE PAYMENTS COLLECTION 
       const user = await collection.insertOne({
-        ...req.body, createdAt: new Date()
+        
+email,
+bookingPrice,
+eventDate,
+bookedBy,
+numberOfSeats,
+seatNumber,
+venueName,
+address,
+eventName,
+createdAt: new Date()
       });
 
-      return res.status(200).json({ message: "Seat has been successfully booked." })
+      const user2 = await eventsCollection.updateOne({ eventName }, { $set : { seatArrangement: newSeatArrangement } })
+// console.log("newSeatArrangement: ",newSeatArrangement)
+      return res.status(200).json({ message: "Seat has been successfully booked.", seatArrangement: newSeatArrangement })
     }
 
   } catch (error) {
+
     console.error("booking a seat endpoint: ", error);
     return res.status(500).json({ message: "Internal Server Error" });
 
@@ -431,7 +504,7 @@ app.post("/newVenue/:email",
         return supabaseImages;
       }))
 
-       const documents = await Promise.all(req.files.documents.map(async (documentObj) => {
+      const documents = await Promise.all(req.files.documents.map(async (documentObj) => {
 
         const oneDocumentObj = {
           ...documentObj
@@ -454,7 +527,8 @@ app.post("/newVenue/:email",
         for (let j = 0; j < parseInt(seatColumns); j++) {
           let seat = {
             seat: `${rowNumber}${j + 1}`,
-            isBooked: false
+            isBooked: false,
+            bookedBy: ""
           };
           arr.push(seat);
         }
@@ -480,35 +554,35 @@ app.post("/newVenue/:email",
 // ENDPOINT USED TO GET ALL OF THE VENUES AND DISPLAY THEM TO MANAGERS AND ADMINS
 app.get("/allVenues", async (req, res) => {
 
-  try{
+  try {
 
-  const collection = mongoose.connection.collection("venues");
-  const allVenues = await collection.find().toArray();
+    const collection = mongoose.connection.collection("venues");
+    const allVenues = await collection.find().toArray();
 
-  console.log("Number of venues inside the database: ", allVenues.length)
- 
-  return res.status(200).json({ message: allVenues });
+    console.log("Number of venues inside the database: ", allVenues.length)
+
+    return res.status(200).json({ message: allVenues });
 
   } catch (error) {
-    console.error("There was an error trying to get all of the venues: ",error);
-    return res.status(500).json({ message:"Internal server error" });
+    console.error("There was an error trying to get all of the venues: ", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 })
 
-app.get("/myVenues/:email", async(req,res) =>{
-  try{
+app.get("/myVenues/:email", async (req, res) => {
+  try {
     const { email } = req.params;
 
     const collection = mongoose.connection.collection("venues");
     const personalVenues = await collection.find({ email }).toArray();
- 
+
     console.log("Number of personal venues inside the database: ", personalVenues.length)
-    
-    if( personalVenues ){
-return res.status(200).json({ message: personalVenues });
+
+    if (personalVenues) {
+      return res.status(200).json({ message: personalVenues });
     }
-     else{
-return res.status(200).json({ message: "Unable to collect venues, does user have any created venues available." });
+    else {
+      return res.status(200).json({ message: "Unable to collect venues, does user have any created venues available." });
     }
 
   } catch (error) {
@@ -572,46 +646,46 @@ app.post("/bookVenue/:email", async (req, res) => {
     const { venueName, eventDate } = req.body;
 
     const { email } = req.params;
-const userCollections = mongoose.connection.collection("users");
-const collection = mongoose.connection.collection("events");
+    const userCollections = mongoose.connection.collection("users");
+    const collection = mongoose.connection.collection("events");
 
-const user = await userCollections.findOne({ lowerCase: email });
+    const user = await userCollections.findOne({ lowerCase: email });
 
-if(!user){
-  return res.status(404).json({ message: "Unable to perform this action because you are not logged in. Log out, log in again and try to perform the action again" });
-}
-else if( user.role === "customer"){
-  return res.status(404).json({ message: "Does not seem like you have no authorization to perform action, contact the reception for inquiries." });
-}
+    if (!user) {
+      return res.status(404).json({ message: "Unable to perform this action because you are not logged in. Log out, log in again and try to perform the action again" });
+    }
+    else if (user.role === "customer") {
+      return res.status(404).json({ message: "Does not seem like you have no authorization to perform action, contact the reception for inquiries." });
+    }
 
-console.log("Venue being booked: ", req.body.venueName);
+    console.log("Venue being booked: ", req.body.venueName);
 
-// Finding all of the events this veue has been booked for
-const events = await collection.find({ venueName }).toArray();
+    // Finding all of the events this veue has been booked for
+    const events = await collection.find({ venueName }).toArray();
 
 
-// console.log( "all the event that are upcoming for that venue:",events)
+    // console.log( "all the event that are upcoming for that venue:",events)
 
-// Checking to see if the venue is about to be doublebooked
-const doubleBooking = await events.filter((item)=>{ return item.eventDate === eventDate });
-// console.log( "all the event that are being double booked :",doubleBooking)
-if( doubleBooking.length != 0 ){
-return res.status(409).json({ message:"The venue has already been booked on this particular day please select a different date to host your event "});
-}
-else{
-  
-  // removing the propertys unique id so that only the mongodb one doesnt clash with the original one. 
-  delete req.body["_id"];
+    // Checking to see if the venue is about to be doublebooked
+    const doubleBooking = await events.filter((item) => { return item.eventDate === eventDate });
+    // console.log( "all the event that are being double booked :",doubleBooking)
+    if (doubleBooking.length != 0) {
+      return res.status(409).json({ message: "The venue has already been booked on this particular day please select a different date to host your event " });
+    }
+    else {
 
-const update = await collection.insertOne({ ...req.body });
-console.log( "Event successfully created ");
-return res.status(200).json({ message: "Event has been successfully created and booked "});
-}
+      // removing the propertys unique id so that only the mongodb one doesnt clash with the original one. 
+      delete req.body["_id"];
+
+      const update = await collection.insertOne({ ...req.body });
+      console.log("Event successfully created ");
+      return res.status(200).json({ message: "Event has been successfully created and booked " });
+    }
 
   }
-   catch (error) {
-console.error("Error trying to book a venue and create a neww event: ", error);
-return res.status(500).json({ message:"Internal server error, please try again later"})
+  catch (error) {
+    console.error("Error trying to book a venue and create a neww event: ", error);
+    return res.status(500).json({ message: "Internal server error, please try again later" })
   }
 });
 
@@ -620,20 +694,108 @@ return res.status(500).json({ message:"Internal server error, please try again l
 // Edit an event that is already public
 app.put("/editUpcomingEvent", async (req, res) => {
   try {
-    
+
   } catch (error) {
 
   }
 });
 
 // Jesicas endpoint called routes
-app.put("/routes", async (req, res) => {
-  try {
-    
-  } catch (error) {
+app.post('/api/save-address', async (req, res) => {
+  const { placeId } = req.body;
 
+  try {
+    // Fetch detailed place information using Google Places Details API
+    const response = await axios.get(
+      `https://maps.googleapis.com/maps/api/place/details/json`,
+      {
+        params: {
+          place_id: placeId,
+          key: GOOGLE_API_KEY,
+        },
+      }
+    );
+
+    const placeDetails = response.data.result;
+
+    // TODO: Save placeDetails.formatted_address, lat, lng to your database here
+
+    res.status(200).json({
+      success: true,
+      address: placeDetails.formatted_address,
+      location: placeDetails.geometry.location,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch address details' });
   }
 });
+
+// PayStack endpoints
+
+// app.post('/api/paystack/initialize', async (req, res) => {
+//   try {
+//     const { email, amount } = req.body;
+
+//     const response = await axios.post(
+//       'https://api.paystack.co/transaction/initialize',
+//       { email, amount },
+//       {
+//         headers: {
+//           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+//           'Content-Type': 'application/json',
+//         },
+//       }
+//     );
+
+//     res.status(200).json(response.data);
+//   } catch (error) {
+//     res.status(500).json({ error: error.response?.data || error.message });
+//   }
+// });
+
+// // Verify Transaction
+
+// app.get('/api/paystack/verify/:reference', async (req, res) => {
+//   const { reference } = req.params;
+//   try {
+//     const response = await axios.get(
+//       `https://api.paystack.co/transaction/verify/${reference}`,
+//       {
+//         headers: {
+//           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+//         },
+//       }
+//     );
+
+//     res.status(200).json(response.data);
+//   } catch (error) {
+//     res.status(500).json({ error: error.response?.data || error.message });
+//   }
+// });
+
+const handlePayment = async (e) => {
+  e.preventDefault();
+
+  if (!email || !name) {
+    alert("Please fill in all fields.");
+    return;
+  }
+
+  try {
+    const initResponse = await axios.post("http://localhost:5173/api/paystack/initialize", {
+      email,
+      amount, // amount in cents
+    });
+
+    const { authorization_url, reference } = initResponse.data.data;
+    window.location.href = authorization_url;
+
+  } catch (error) {
+    console.error("Initialization error:", error);
+    alert("Could not start payment.");
+  }
+};
 
 
 // Endpoint used to get all the events that are coming to display it
